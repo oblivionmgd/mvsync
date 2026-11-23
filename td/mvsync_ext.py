@@ -269,13 +269,26 @@ class MVSyncExt:
             run("args[0]._kill(args[1])", self, int(pid), delayMilliSeconds=int(kill_after * 1000))
         self.Log("worker stop requested")
 
+    def _kill_tree_win(self, pid):
+        """Windows: end the worker and its yt-dlp / ffmpeg children (no process groups there)."""
+        try:
+            subprocess.Popen(["taskkill", "/PID", str(int(pid)), "/T", "/F"], stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, creationflags=0x08000000)
+        except Exception:
+            pass
+
     def _kill(self, pid):
         try:
             if self.proc is not None and self.proc.pid == pid:
                 if self.proc.poll() is None:
-                    self.proc.terminate()
+                    if IS_WIN:
+                        self._kill_tree_win(pid)
+                    else:
+                        self.proc.terminate()
                 self.proc = None
-            elif not IS_WIN:
+            elif IS_WIN:
+                self._kill_tree_win(pid)
+            else:
                 os.kill(pid, 15)
         except Exception:
             pass

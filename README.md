@@ -9,7 +9,7 @@ DJ ミックスの音を聞いて、いま流れている曲の **ミュージ�
 - Remix の曲は Remix の MV、なければ原曲の MV を頭から流す
 - TouchDesigner 側は `mvsync.tox` を置くだけ。出力は TOP（`out1`）と状態の CHOP（`out_ctrl`）
 
-> 動作確認環境: macOS（Apple Silicon / Intel）、TouchDesigner 2025.33230、Python 3.12。Windows は一部対応のコードがありますが未確認です。
+> 動作確認環境: macOS（Apple Silicon / Intel）、TouchDesigner 2025.33230、Python 3.12。Windows 10 / 11 は確認中です。
 
 ## 仕組み
 
@@ -32,6 +32,17 @@ DJ の音 ──(BlackHole など)──▶ worker（Python, TD の外）
 | Node.js | yt-dlp の YouTube 対応 | `brew install node` |
 | 仮想オーディオデバイス（BlackHole など） | DJ の音を worker に渡す | `brew install blackhole-16ch` |
 
+Windows では次のものを使います（PowerShell / コマンドプロンプト）。
+
+| もの | 入れ方（Windows） |
+|---|---|
+| uv | `winget install astral-sh.uv` |
+| ffmpeg | `winget install Gyan.FFmpeg` |
+| Node.js | `winget install OpenJS.NodeJS.LTS` |
+| 仮想オーディオデバイス | [VB-CABLE](https://vb-audio.com/Cable/)（DJ ソフトの出力を「CABLE Input」にする） |
+
+winget で入れたあとは、PATH を反映させるためにターミナルと TouchDesigner を開き直してください。
+
 ShazamIO が Python 3.13 以降に対応していないため、worker は Python 3.12 で動かします。
 
 ## インストール
@@ -43,13 +54,15 @@ ShazamIO が Python 3.13 以降に対応していないため、worker は Pytho
    ./setup.sh
    ```
 
+   Windows では `setup.bat` をダブルクリックします。
+
    フォルダ内に `.venv` ができ、numpy / scipy / sounddevice / python-osc / shazamio / yt-dlp が入ります。
 3. TouchDesigner で `mvsync.tox` をネットワークにドラッグします。
 4. COMP の **Config** ページを確認します。
    - **Code folder** … 空欄なら tox と同じフォルダ（またはプロジェクトフォルダ）から `worker/` を探します。tox を別の場所に置いた場合は展開したフォルダを指定してください。
    - **Worker Python / yt-dlp path / node folder** … 空欄なら自動で探します（`<Code folder>/.venv/bin/python` など）。
    - **Library folder** … MV の保存先（既定 `~/MVSync`）。
-   - **Audio device** … DJ の音が来る入力デバイス名の一部（既定 `BlackHole`）。
+   - **Audio device** … DJ の音が来る入力デバイス名の一部（既定 `BlackHole`）。Windows で VB-CABLE を使うときは `CABLE Output` にします。見つからないときは、worker のログ（`<Library folder>/logs/worker_stdout.log`）に入力デバイスの一覧が出ます。
 5. **Worker** ページの **Start** を押します。Status ページの Worker が「動作中」になれば準備完了です。
 
 ## 使い方
@@ -111,6 +124,8 @@ TD なしで動作を確かめるとき:
 .venv/bin/python worker/mvsync_worker.py --config ~/MVSync/config.json
 .venv/bin/python worker/mvsync_worker.py --config ~/MVSync/config.json --input-file song.wav
 ```
+
+Windows では `.venv\Scripts\python.exe worker\mvsync_worker.py --config %USERPROFILE%\MVSync\config.json`。
 
 ログは `<Library folder>/logs/` に出ます。
 

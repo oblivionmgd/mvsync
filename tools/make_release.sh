@@ -12,7 +12,7 @@ mkdir -p "$STAGE/worker" "$STAGE/td"
 cp "$ROOT"/worker/*.py "$ROOT/worker/requirements.txt" "$STAGE/worker/"
 cp "$ROOT"/td/*.py "$STAGE/td/"
 cp "$ROOT/README.md" "$ROOT/LICENSE" "$STAGE/" 2>/dev/null || true
-cp "$ROOT/setup.sh" "$STAGE/"
+cp "$ROOT/setup.sh" "$ROOT/setup.bat" "$STAGE/"
 (cd "$ROOT/dist/stage" && rm -f "../mvsync-$VER.zip" && zip -qr -X "../mvsync-$VER.zip" "mvsync-$VER")
 rm -rf "$ROOT/dist/stage"
 echo "$ROOT/dist/mvsync-$VER.zip"
