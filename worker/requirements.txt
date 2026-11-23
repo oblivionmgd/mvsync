@@ -1,0 +1,7 @@
+# MVSync worker (Python 3.12; shazamio needs <= 3.12)
+numpy
+scipy
+sounddevice
+python-osc
+shazamio
+yt-dlp[default]
