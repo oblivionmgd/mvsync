@@ -34,7 +34,7 @@ IS_WIN = os.name == "nt"
 DEFAULT_CONFIG = {
     "library_dir": "~/MVSync",
     "ytdlp": "",                   # empty = yt-dlp next to this Python (venv), then PATH
-    "ytdlp_args": ["--js-runtimes", "node"],
+    "ytdlp_args": [],               # --js-runtimes is added automatically (bundled Deno, else node)
     "ytdlp_python": "",
     "node_dir": "",                # empty = node on PATH, /opt/homebrew/bin, /usr/local/bin
     "ffmpeg": "ffmpeg",
@@ -111,6 +111,22 @@ def find_node_dir(cfg):
     return None
 
 
+def js_runtime_args(cfg, args):
+    """yt-dlp needs a JS runtime for YouTube: the Deno from the venv (pip package "deno"), else node."""
+    if any(str(a).startswith("--js-runtimes") for a in args):
+        return []
+    try:
+        import deno
+        exe = deno.find_deno_bin()
+        if exe and os.path.exists(exe):
+            return ["--js-runtimes", "deno:" + exe]
+    except Exception:
+        pass
+    if find_node_dir(cfg):
+        return ["--js-runtimes", "node"]
+    return []
+
+
 def find_ffmpeg(cfg):
     import shutil
     exe = cfg.get("ffmpeg") or "ffmpeg"
@@ -120,7 +136,11 @@ def find_ffmpeg(cfg):
     for cand in ([found] if found else []) + ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]:
         if cand and os.path.exists(cand):
             return cand
-    return exe
+    try:
+        import imageio_ffmpeg            # bundled ffmpeg (pip package "imageio-ffmpeg")
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return exe
 
 
 # ===================================================================== audio input
@@ -262,6 +282,7 @@ class Worker:
         host, port = cfg["osc_to_td"].rsplit(":", 1)
         self.osc = SimpleUDPClient(host, int(port))
         yargs = list(cfg.get("ytdlp_args") or [])
+        yargs += js_runtime_args(cfg, yargs)
         if cfg.get("youtube_lang", "ja"):
             # titles in Japanese: in English YouTube returns "ftrygry - Swallow" for 「燕」 and the
             # candidate check (title must name the song) dropped the right MV

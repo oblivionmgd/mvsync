@@ -5,3 +5,5 @@ sounddevice
 python-osc
 shazamio
 yt-dlp[default]
+imageio-ffmpeg
+deno

@@ -81,6 +81,9 @@ pg.appendPulse("Openfolder", label="Open library folder")
 pg.appendToggle("Clearcache", label="Clear cache on exit")[0].default = True   # non-playlist MVs
 
 pg = page("Worker")
+pg.appendPulse("Install", label="Install / Repair")      # runs setup.sh / setup.bat: Python, yt-dlp, ffmpeg, Deno
+p = pg.appendStr("Installstatus", label="Install status")[0]
+p.readOnly = True
 pg.appendPulse("Start", label="Start")
 pg.appendPulse("Stop", label="Stop")
 p = pg.appendToggle("Running", label="Running")[0]

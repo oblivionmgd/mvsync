@@ -52,11 +52,17 @@ class MVSyncExt:
         self.bpm_base = {}
         self.proc = None
         self.update_proc = None
+        self.install_proc = None
+        self.install_poll = 0.0
         self.restarts = 0
         self.nudge_ms = 0.0
         self.library = {}
         self.silent = False
         self.owner.store("ext_loaded", time.time())
+        try:
+            self._set_install_status()
+        except Exception:
+            pass
         try:
             self.Send("/mvsync/resend")
         except Exception:
@@ -89,10 +95,32 @@ class MVSyncExt:
         return os.path.join(_x(self.owner.par.Libraryfolder.eval()), "config.json")
 
     # ---- paths: an empty Config field means "find it automatically"
+    def app_dir(self):
+        """Where Install unpacks the worker that is embedded in the tox."""
+        return os.path.join(_x(self.owner.par.Libraryfolder.eval()), "app")
+
+    def payload(self):
+        """Embedded worker files (release tox only): {relative path: Text DAT}."""
+        idx = self._op("payload/files")
+        if idx is None:
+            return {}
+        out = {}
+        for r in range(1, idx.numRows):
+            d = self._op("payload/" + idx[r, "dat"].val)
+            if d is not None:
+                out[idx[r, "path"].val] = d
+        return out
+
+    def payload_version(self):
+        idx = self._op("payload/files")
+        cell = idx[0, 2] if idx is not None and idx.numCols > 2 else None
+        return cell.val.split("version=", 1)[-1] if cell is not None and "version=" in cell.val else ""
+
     def code_dir(self):
-        """Folder holding worker/ and td/. Empty Codedir -> next to the tox, then the project folder."""
+        """Folder holding worker/. Empty Codedir -> the installed app (<Library>/app), next to the tox,
+        then the project folder."""
         given = _x(self.owner.par.Codedir.eval())
-        cands = [given] if given else []
+        cands = [given] if given else [self.app_dir()]
         try:
             tox = _x(self.owner.par.externaltox.eval())
             if tox:
@@ -133,6 +161,109 @@ class MVSyncExt:
                 return d
         return ""
 
+    # ================================================================== install (setup.sh / setup.bat)
+    def _install_log(self):
+        return os.path.join(_x(self.owner.par.Libraryfolder.eval()), "logs", "install.log")
+
+    def _installed_version(self):
+        try:
+            with open(os.path.join(self.app_dir(), "VERSION"), encoding="utf-8") as f:
+                return f.read().strip()
+        except Exception:
+            return ""
+
+    def _set_install_status(self, text=None):
+        if not hasattr(self.owner.par, "Installstatus"):
+            return
+        if text is None:
+            if not os.path.exists(self.worker_script()) and not self.payload():
+                text = "Code folder を設定してください（worker/ が見つかりません）"
+            elif not os.path.exists(self.python_path()):
+                text = "未インストール（Install を押してください）"
+            elif (self.payload() and not self.owner.par.Codedir.eval()
+                  and self._installed_version() != self.payload_version()):
+                text = "更新があります（Install を押してください）"
+            else:
+                text = "準備完了"
+        self.owner.par.Installstatus = text
+
+    def _unpack_payload(self):
+        """Writes the embedded worker / setup files to <Library>/app (overwrites: Install = repair/update)."""
+        root = self.app_dir()
+        for rel, d in self.payload().items():
+            path = os.path.join(root, *rel.split("/"))
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            text = d.text
+            if rel.endswith(".bat"):
+                text = text.replace("\r\n", "\n").replace("\n", "\r\n")
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(text)
+            if rel.endswith(".sh") and not IS_WIN:
+                os.chmod(path, 0o755)
+        with open(os.path.join(root, "VERSION"), "w", encoding="utf-8") as f:
+            f.write(self.payload_version())
+        return root
+
+    def Install(self):
+        """Creates <code folder>/.venv with everything the worker needs, in the background."""
+        if self.install_proc is not None and self.install_proc.poll() is None:
+            self.Log("install already running")
+            return
+        if self._alive():
+            self.Stop(kill_after=0.5)
+        if self.payload() and not self.owner.par.Codedir.eval():
+            try:
+                root = self._unpack_payload()
+            except Exception as e:
+                self.Log("unpack failed: %s" % e)
+                self._set_install_status("失敗: ファイルを書き出せません（%s）" % e)
+                return
+        else:
+            root = self.code_dir()
+        script = os.path.join(root, "setup.bat" if IS_WIN else "setup.sh")
+        if not os.path.exists(script):
+            self.Log("setup script not found: %s" % script)
+            self._set_install_status("失敗: %s がありません" % os.path.basename(script))
+            return
+        log = self._install_log()
+        os.makedirs(os.path.dirname(log), exist_ok=True)
+        out = open(log, "w", encoding="utf-8")
+        env = dict(os.environ)
+        env.pop("PYTHONHOME", None)
+        env.pop("PYTHONPATH", None)
+        env["MVSYNC_NO_PAUSE"] = "1"
+        if IS_WIN:
+            cmd, kw = ["cmd", "/c", script], {"creationflags": 0x08000000}
+        else:
+            cmd, kw = ["/bin/sh", script], {"start_new_session": True}
+        self.install_proc = subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                             cwd=root, env=env, **kw)
+        self._set_install_status("インストール中…")
+        self.Log("install started: %s (log: %s)" % (script, log))
+
+    def _poll_install(self, now):
+        if self.install_proc is None or now - self.install_poll < 0.5:
+            return
+        self.install_poll = now
+        code = self.install_proc.poll()
+        last = ""
+        try:
+            with open(self._install_log(), encoding="utf-8", errors="replace") as f:
+                lines = [l.strip() for l in f.read().splitlines() if l.strip()]
+            last = lines[-1] if lines else ""
+        except Exception:
+            pass
+        if code is None:
+            self._set_install_status("インストール中… " + last[:80])
+            return
+        self.install_proc = None
+        if code == 0 and os.path.exists(self.python_path()):
+            self._set_install_status()
+            self.Log("install finished")
+        else:
+            self._set_install_status("失敗（logs/install.log）: " + last[:80])
+            self.Log("install failed (exit %s): %s" % (code, last))
+
     def worker_script(self):
         return os.path.join(self.code_dir(), "worker", "mvsync_worker.py")
 
@@ -168,7 +299,7 @@ class MVSyncExt:
         for name, key in (("Prioritywords", "title_priority_words"), ("Ngwords", "title_ng_words")):
             if hasattr(p, name):
                 cfg[key] = _words(getattr(p, name).eval())
-        cfg.setdefault("ytdlp_args", ["--js-runtimes", "node"])
+        cfg.setdefault("ytdlp_args", [])   # the worker adds --js-runtimes (bundled Deno, else node)
         cfg.setdefault("audd_token", "")
         x = float(p.Speedrange.eval()) / 100.0 if hasattr(p, "Speedrange") else 0.16
         cfg["rate_range"] = [round(1 - x, 4), round(1 + x, 4)]
@@ -237,7 +368,8 @@ class MVSyncExt:
         py = self.python_path()
         script = self.worker_script()
         if not os.path.exists(py):
-            self.Log("Python が見つかりません: %s" % py)
+            self.Log("Python が見つかりません: %s（Worker ページの Install を押してください）" % py)
+            self._set_install_status()
             return
         if not os.path.exists(script):
             self.Log("worker script not found: %s" % script)
@@ -625,6 +757,7 @@ class MVSyncExt:
                     self.Start(auto=True)
         elif alive_hb:
             p.Workerstatus = "動作中"
+        self._poll_install(now)
         if self.update_proc is not None and self.update_proc.poll() is not None:
             self.Log("Update tools finished (exit %s)" % self.update_proc.returncode)
             self.update_proc = None
@@ -646,7 +779,9 @@ class MVSyncExt:
     # ================================================================== parameters
     def OnPulse(self, par):
         n = par.name
-        if n == "Start":
+        if n == "Install":
+            self.Install()
+        elif n == "Start":
             self.Start()
         elif n == "Stop":
             self.Stop()

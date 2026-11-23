@@ -24,46 +24,33 @@ DJ の音 ──(BlackHole など)──▶ worker（Python, TD の外）
 
 ## 必要なもの
 
-| もの | 用途 | 入れ方（macOS） |
-|---|---|---|
-| TouchDesigner 2025 以降 | 再生 | https://derivative.ca |
-| Python 3.12 と [uv](https://docs.astral.sh/uv/)（推奨） | worker | `brew install uv` |
-| ffmpeg | 音声の取り出し・720p 以上の結合 | `brew install ffmpeg` |
-| Node.js | yt-dlp の YouTube 対応 | `brew install node` |
-| 仮想オーディオデバイス（BlackHole など） | DJ の音を worker に渡す | `brew install blackhole-16ch` |
+- TouchDesigner 2025 以降
+- DJ の音を PC に入れる手段（例: macOS は [BlackHole](https://github.com/ExistentialAudio/BlackHole)、Windows は [VB-CABLE](https://vb-audio.com/Cable/)、またはオーディオインターフェースの入力）
+- インターネット接続
 
-Windows では次のものを使います（PowerShell / コマンドプロンプト）。
-
-| もの | 入れ方（Windows） |
-|---|---|
-| uv | `winget install astral-sh.uv` |
-| ffmpeg | `winget install Gyan.FFmpeg` |
-| Node.js | `winget install OpenJS.NodeJS.LTS` |
-| 仮想オーディオデバイス | [VB-CABLE](https://vb-audio.com/Cable/)（DJ ソフトの出力を「CABLE Input」にする） |
-
-winget で入れたあとは、PATH を反映させるためにターミナルと TouchDesigner を開き直してください。
-
-ShazamIO が Python 3.13 以降に対応していないため、worker は Python 3.12 で動かします。
+Python・yt-dlp・ffmpeg・Deno などは、TD の **Install** ボタンが自動で入れます。別にインストールするものはありません。
 
 ## インストール
 
-1. [Releases](../../releases) から `mvsync-<version>.zip` をダウンロードして、好きな場所に展開します。
-2. ターミナルで展開したフォルダに移動し、worker の環境を作ります。
+1. [Releases](../../releases) から `mvsync.tox` をダウンロードし、TouchDesigner のネットワークにドラッグします。
+2. COMP の **Worker** ページで **Install / Repair** を押します。
+   - 初回は 1〜数分かかります（Python 3.12 と必要なパッケージ、約 400 MB をダウンロード）。
+   - **Install status** が「準備完了」になれば終わりです。進み具合もここに出ます。
+   - 入る場所は `<Library folder>/app`（既定 `~/MVSync/app`）だけです。消すときはこのフォルダを消してください。
+3. **Config** ページの **Audio device** に、DJ の音が来る入力デバイス名の一部を入れます（既定 `BlackHole`。VB-CABLE なら `CABLE Output`）。見つからないときは worker のログ（`<Library folder>/logs/worker_stdout.log`）に入力デバイスの一覧が出ます。
+4. **Worker** ページの **Start** を押します。Status ページの Worker が「動作中」になれば準備完了です。
 
-   ```bash
-   ./setup.sh
-   ```
+新しいバージョンの tox に入れ替えたときは、Install status に「更新があります」と出るので、もう一度 **Install / Repair** を押してください。
 
-   Windows では `setup.bat` をダブルクリックします。
+### Config ページの場所の設定（通常は空欄のまま）
 
-   フォルダ内に `.venv` ができ、numpy / scipy / sounddevice / python-osc / shazamio / yt-dlp が入ります。
-3. TouchDesigner で `mvsync.tox` をネットワークにドラッグします。
-4. COMP の **Config** ページを確認します。
-   - **Code folder** … 空欄なら tox と同じフォルダ（またはプロジェクトフォルダ）から `worker/` を探します。tox を別の場所に置いた場合は展開したフォルダを指定してください。
-   - **Worker Python / yt-dlp path / node folder** … 空欄なら自動で探します（`<Code folder>/.venv/bin/python` など）。
-   - **Library folder** … MV の保存先（既定 `~/MVSync`）。
-   - **Audio device** … DJ の音が来る入力デバイス名の一部（既定 `BlackHole`）。Windows で VB-CABLE を使うときは `CABLE Output` にします。見つからないときは、worker のログ（`<Library folder>/logs/worker_stdout.log`）に入力デバイスの一覧が出ます。
-5. **Worker** ページの **Start** を押します。Status ページの Worker が「動作中」になれば準備完了です。
+- **Library folder** … MV・設定・ログ・worker の保存先（既定 `~/MVSync`）
+- **Code folder** … 空欄なら `<Library folder>/app`（Install で入る場所）を使います。リポジトリのソースで動かすときだけ指定します。
+- **Worker Python / yt-dlp path / node folder** … 空欄なら自動で探します。
+
+### ターミナルで入れる場合
+
+[Releases](../../releases) の `mvsync-<version>.zip` を展開し、`./setup.sh`（Windows は `setup.bat`）を実行すると、同じものがそのフォルダの `.venv` に入ります。この場合は Config の **Code folder** に展開したフォルダを指定してください。
 
 ## 使い方
 
@@ -121,24 +108,26 @@ Shazam への問い合わせは日本語・日本（`shazam_language` = `ja-JP`�
 TD なしで動作を確かめるとき:
 
 ```bash
+cd ~/MVSync/app
 .venv/bin/python worker/mvsync_worker.py --config ~/MVSync/config.json
 .venv/bin/python worker/mvsync_worker.py --config ~/MVSync/config.json --input-file song.wav
 ```
 
-Windows では `.venv\Scripts\python.exe worker\mvsync_worker.py --config %USERPROFILE%\MVSync\config.json`。
+Windows では `%USERPROFILE%\MVSync\app` で `.venv\Scripts\python.exe worker\mvsync_worker.py --config %USERPROFILE%\MVSync\config.json`。
 
 ログは `<Library folder>/logs/` に出ます。
 
 ## 開発者向け
 
 - `td/` … tox の中の Text DAT と同じコード。`td/build_mvsync.py` で COMP を一から組み立てられます（TD の Textport で `CODEDIR='<repo>'; exec(open('<repo>/td/build_mvsync.py').read())`。この場合 DAT はファイルと同期します）。
-- `tools/build_tox.py` … 配布用の `dist/mvsync.tox`（コード埋め込み）を書き出します（TD の Textport で `ROOT='<repo>'; exec(open(ROOT + '/tools/build_tox.py').read())`）。
+- `tools/build_tox.py` … 配布用の `dist/mvsync.tox` を書き出します。TD 側のコードと、Install で書き出す worker / setup 一式（`mvsync/payload`）を埋め込みます（TD の Textport で `ROOT='<repo>'; VERSION='0.1.0'; exec(open(ROOT + '/tools/build_tox.py').read())`）。
 - `tools/make_release.sh <version>` … `dist/mvsync-<version>.zip` を作ります。
 
 ## 注意
 
 - YouTube の動画のダウンロードは YouTube の利用規約や各国の著作権法の対象です。権利を持っている・許諾を得ている範囲で、自己責任で使ってください。
 - ShazamIO は Shazam の非公式クライアントです。
+- Install は uv（https://astral.sh/uv）と、uv が配布する Python 3.12 をダウンロードします。
 
 ## ライセンス
 
