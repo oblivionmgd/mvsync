@@ -99,7 +99,7 @@ pg.appendFolder("Libraryfolder", label="Library folder")[0].default = LIBRARY
 pg.appendFile("Ytdlppath", label="yt-dlp path (empty = auto)")[0].default = ""
 pg.appendFolder("Nodedir", label="node folder (empty = auto)")[0].default = ""
 pg.appendFile("Pythonpath", label="Worker Python (empty = auto)")[0].default = ""
-pg.appendStr("Audiodevice", label="Audio device (empty = auto)")[0].default = ""
+pg.appendStr("Audiodevice", label="Audio device (empty = OS default)")[0].default = ""
 pg.appendInt("Osctoport", label="OSC port worker->TD")[0].default = 9100
 pg.appendInt("Oscfromport", label="OSC port TD->worker")[0].default = 9101
 p = pg.appendMenu("Recognizer", label="Recognizer")[0]

@@ -39,7 +39,7 @@ DEFAULT_CONFIG = {
     "node_dir": "",                # empty = node on PATH, /opt/homebrew/bin, /usr/local/bin
     "ffmpeg": "ffmpeg",
     "python": "",
-    "audio_device": "",            # empty = BlackHole (macOS) / CABLE Output (Windows) / system default
+    "audio_device": "",            # empty = the OS default input (Windows: recording default, macOS: Sound > Input)
     "osc_to_td": "127.0.0.1:9100",
     "osc_from_td": 9101,
     "recognizer": "shazamio",
@@ -201,11 +201,17 @@ class DeviceInput:
         self.sd = sd
         devs = sd.query_devices()
         apis = [a["name"] for a in sd.query_hostapis()]
-        name = (name or "").strip() or ("CABLE Output" if IS_WIN else "BlackHole" if sys.platform == "darwin" else "")
+        name = (name or "").strip()
         if name:
             cands = [i for i, d in enumerate(devs) if d["max_input_channels"] > 0 and name.lower() in d["name"].lower()]
         else:
-            cands = [sd.default.device[0]] if sd.default.device[0] is not None and sd.default.device[0] >= 0 else []
+            # the OS default input; on Windows every host API has its own default -> try WASAPI's first
+            cands = [h["default_input_device"] for h in sd.query_hostapis()
+                     if h.get("default_input_device", -1) is not None and h.get("default_input_device", -1) >= 0
+                     and devs[h["default_input_device"]]["max_input_channels"] > 0]
+            if not cands and sd.default.device[0] is not None and sd.default.device[0] >= 0:
+                cands = [sd.default.device[0]]
+            name = "(OS の既定の入力)"
 
         def rank(i):
             api = apis[devs[i]["hostapi"]]
