@@ -99,7 +99,10 @@ pg.appendFolder("Libraryfolder", label="Library folder")[0].default = LIBRARY
 pg.appendFile("Ytdlppath", label="yt-dlp path (empty = auto)")[0].default = ""
 pg.appendFolder("Nodedir", label="node folder (empty = auto)")[0].default = ""
 pg.appendFile("Pythonpath", label="Worker Python (empty = auto)")[0].default = ""
-pg.appendStr("Audiodevice", label="Audio device (empty = OS default)")[0].default = ""
+p = pg.appendStrMenu("Audiodevice", label="Audio device")[0]
+p.menuSource = "tdu.TableMenu(op('./menu_audio'), labelCol=1, includeFirstRow=True)"   # filled from audio_devices
+p.default = "default"
+pg.appendPulse("Refreshaudio", label="Refresh audio devices")
 pg.appendInt("Osctoport", label="OSC port worker->TD")[0].default = 9100
 pg.appendInt("Oscfromport", label="OSC port TD->worker")[0].default = 9101
 p = pg.appendMenu("Recognizer", label="Recognizer")[0]
@@ -187,11 +190,17 @@ log.nodeX, log.nodeY = -400, -150
 lib = c.create(tableDAT, "library")
 lib.clear()
 lib.nodeX, lib.nodeY = -400, -300
-for i, (name, row) in enumerate([("menu_tracks", ["auto", "(auto)"]), ("menu_playlists", ["All", "All"])]):
+for i, (name, row) in enumerate([("menu_tracks", ["auto", "(auto)"]), ("menu_playlists", ["All", "All"]),
+                                  ("menu_audio", ["default", "(OS default input)"])]):
     m = c.create(tableDAT, name)
     m.clear()
     m.appendRow(row)
     m.nodeX, m.nodeY = -200, -300 - i * 150
+
+# the OS input device list (never opened: Active off) for the Audio device menu
+adi = c.create(audiodeviceinCHOP, "audio_devices")
+adi.par.active = False
+adi.nodeX, adi.nodeY = -200, -600
 
 # ---------------------------------------------------------------- video chain
 x0 = 0

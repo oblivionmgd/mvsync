@@ -202,8 +202,16 @@ class DeviceInput:
         devs = sd.query_devices()
         apis = [a["name"] for a in sd.query_hostapis()]
         name = (name or "").strip()
+        if name.lower() == "default":
+            name = ""
         if name:
-            cands = [i for i, d in enumerate(devs) if d["max_input_channels"] > 0 and name.lower() in d["name"].lower()]
+            # names from TD's menu: "X", "X: X" (macOS) or the full Windows name (MME cuts it at 31 chars)
+            keys = {name.lower()} | ({name.split(": ", 1)[0].lower()} if ": " in name else set())
+
+            def hit(dn):
+                dn = dn.lower()
+                return any(k in dn or (len(dn) >= 8 and k.startswith(dn)) for k in keys)
+            cands = [i for i, d in enumerate(devs) if d["max_input_channels"] > 0 and hit(d["name"])]
         else:
             # the OS default input; on Windows every host API has its own default -> try WASAPI's first
             cands = [h["default_input_device"] for h in sd.query_hostapis()

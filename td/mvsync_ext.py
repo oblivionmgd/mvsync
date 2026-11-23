@@ -64,6 +64,10 @@ class MVSyncExt:
         except Exception:
             pass
         try:
+            self.RefreshAudioDevices()
+        except Exception:
+            pass
+        try:
             self.Send("/mvsync/resend")
         except Exception:
             pass
@@ -298,7 +302,7 @@ class MVSyncExt:
             "ytdlp": self.ytdlp_path(),
             "node_dir": self.node_dir(),
             "python": self.python_path(),
-            "audio_device": p.Audiodevice.eval(),
+            "audio_device": self._audio_device(),
             "osc_to_td": "127.0.0.1:%d" % int(p.Osctoport.eval()),
             "osc_from_td": int(p.Oscfromport.eval()),
             "recognizer": p.Recognizer.eval(),
@@ -622,6 +626,26 @@ class MVSyncExt:
         p.Libraryinfo = "%d ready / %d total, %d playlists" % (n_ready, len(lib.get("entries", [])),
                                                                len(lib.get("playlists", [])))
 
+    def RefreshAudioDevices(self, rescan=False):
+        """Audio device menu = the input devices TouchDesigner sees (Audio Device In CHOP's list).
+        The menu value is the device NAME; the worker looks the name up in its own (PortAudio) list."""
+        a = self._op("audio_devices")
+        if a is None:
+            return
+        if rescan:
+            try:
+                a.par.refresh.pulse()
+            except Exception:
+                pass
+            run("args[0].RefreshAudioDevices()", self, delayFrames=10)
+            return
+        labels = [l for n, l in zip(a.par.device.menuNames, a.par.device.menuLabels) if n != "default"]
+        self._fill_menu("menu_audio", ["default"] + labels, ["(OS default input)"] + labels)
+
+    def _audio_device(self):
+        v = self.owner.par.Audiodevice.eval().strip()
+        return "" if v.lower() == "default" else v
+
     def _fill_menu(self, name, names, labels):
         t = self._op(name)
         if t is None:
@@ -801,6 +825,8 @@ class MVSyncExt:
         n = par.name
         if n == "Install":
             self.Install()
+        elif n == "Refreshaudio":
+            self.RefreshAudioDevices(rescan=True)
         elif n == "Start":
             self.Start()
         elif n == "Stop":

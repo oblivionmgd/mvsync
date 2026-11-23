@@ -37,7 +37,7 @@ Python・yt-dlp・ffmpeg・Deno などは、TD の **Install** ボタンが自�
    - 初回は 1〜数分かかります（Python 3.12 と必要なパッケージ、約 400 MB をダウンロード）。
    - **Install status** が「準備完了」になれば終わりです。進み具合もここに出ます。
    - 入る場所は `<Library folder>/app`（既定 `~/MVSync/app`）だけです。消すときはこのフォルダを消してください。
-3. **Config** ページの **Audio device** を確認します。空欄なら OS の既定の入力デバイスを使います（Windows は「サウンド」設定の録音の既定のデバイス、macOS は「サウンド」設定の入力）。別のデバイスを使うときは、その名前の一部（例: `BlackHole`、`CABLE Output`）を入れてください。見つからないときは、使える入力デバイスの一覧が Status ページの **Last log** に出ます。
+3. **Config** ページの **Audio device** で、DJ の音が来る入力デバイスを一覧から選びます（TouchDesigner の Audio Device In と同じ一覧です）。**(OS default input)** は OS の既定の入力（Windows は「サウンド」設定の録音の既定、macOS は「サウンド」設定の入力）を使います。一覧にないときは **Refresh audio devices** を押すか、名前の一部を直接入力してください。デバイスを開けないときは、使える入力デバイスの一覧が Status ページの **Last log** に出ます。
 4. **Worker** ページの **Start** を押します。Status ページの Worker が「動作中」になれば準備完了です。
 
 新しいバージョンの tox に入れ替えたときは、Install status に「更新があります」と出るので、もう一度 **Install / Repair** を押してください。
