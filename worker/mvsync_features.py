@@ -5,6 +5,7 @@ Output: onset envelope on a 50 fps grid, locally normalised.
 """
 import os
 import subprocess
+import time
 
 import numpy as np
 
@@ -138,12 +139,25 @@ def decode_audio(path, ffmpeg="ffmpeg", sr=SR):
     return np.frombuffer(out, np.float32).copy()
 
 
+def replace_file(src, dst, tries=20, wait=0.1):
+    """os.replace that retries: on Windows it fails (WinError 5 / 32) while another process
+    (TouchDesigner reading the index, antivirus, search indexer) has the target open."""
+    for i in range(tries):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(wait)
+
+
 def save_ref(path, feat):
     onset, bands = feat
     tmp = str(path) + ".tmp.npz"
     np.savez_compressed(tmp, onset=onset.astype(np.float32), bands=bands.astype(np.float16),
                         fps=FPS, version=FEAT_VERSION)
-    os.replace(tmp, path)
+    replace_file(tmp, path)
 
 
 def load_ref(path):

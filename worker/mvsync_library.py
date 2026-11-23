@@ -201,7 +201,7 @@ class Library:
             d.mkdir(parents=True, exist_ok=True)
             tmp = d / "meta.json.tmp"
             tmp.write_text(json.dumps(m, ensure_ascii=False, indent=1), encoding="utf-8")
-            os.replace(tmp, d / "meta.json")
+            F.replace_file(tmp, d / "meta.json")
             return m
 
     def write_index(self):
@@ -218,10 +218,10 @@ class Library:
                     "playlists": pls}
             tmp = self.index_path.with_suffix(".json.tmp")
             tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
-            os.replace(tmp, self.index_path)
+            F.replace_file(tmp, self.index_path)
             tmp = self.pl_path.with_suffix(".json.tmp")
             tmp.write_text(json.dumps(self.playlists, ensure_ascii=False, indent=1), encoding="utf-8")
-            os.replace(tmp, self.pl_path)
+            F.replace_file(tmp, self.pl_path)
         self.on_change(str(self.index_path))
 
     def ready_ids(self):
@@ -452,7 +452,7 @@ class Library:
                 got = [p for p in d.glob("dl.*") if p.suffix not in (".part", ".ytdl", ".temp")]
                 if not got:
                     raise RuntimeError("download produced no file")
-                os.replace(got[0], out)     # (an open file in TD keeps playing the old one)
+                F.replace_file(got[0], out)     # (an open file in TD keeps playing the old one)
                 self._write_meta(vid, height=self.video_height(out))
                 if upgrade:
                     self.upgrade.discard(vid)

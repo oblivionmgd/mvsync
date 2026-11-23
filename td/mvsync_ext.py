@@ -231,6 +231,7 @@ class MVSyncExt:
         env = dict(os.environ)
         env.pop("PYTHONHOME", None)
         env.pop("PYTHONPATH", None)
+        env["PYTHONIOENCODING"] = "utf-8"
         env["MVSYNC_NO_PAUSE"] = "1"
         if IS_WIN:
             cmd, kw = ["cmd", "/c", script], {"creationflags": 0x08000000}
@@ -263,6 +264,21 @@ class MVSyncExt:
         else:
             self._set_install_status("失敗（logs/install.log）: " + last[:80])
             self.Log("install failed (exit %s): %s" % (code, last))
+
+    def _worker_error(self):
+        """Last error line of worker_stdout.log (the worker died before it could tell TD)."""
+        path = os.path.join(_x(self.owner.par.Libraryfolder.eval()), "logs", "worker_stdout.log")
+        try:
+            with open(path, "rb") as f:
+                f.seek(max(0, os.path.getsize(path) - 8000))
+                lines = f.read().decode("utf-8", "replace").splitlines()
+        except Exception:
+            return ""
+        for l in reversed(lines):
+            l = l.strip()
+            if "Error" in l or "ERROR" in l or "Exception" in l:
+                return l[:400]
+        return ""
 
     def worker_script(self):
         return os.path.join(self.code_dir(), "worker", "mvsync_worker.py")
@@ -384,6 +400,7 @@ class MVSyncExt:
             kw["start_new_session"] = True
         env = dict(os.environ)
         env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"   # logs in UTF-8 (Windows would write cp932 / cp1252)
         env.pop("PYTHONHOME", None)    # TD's own Python must not leak into the venv
         env.pop("PYTHONPATH", None)
         self.proc = subprocess.Popen([py, script, "--config", cfg], stdout=out,
@@ -749,6 +766,9 @@ class MVSyncExt:
             if p.Workerstatus.eval() != "停止":
                 p.Workerstatus = "停止"
                 self.Log("ワーカー停止（heartbeat が 3 秒来ていません）")
+                err = self._worker_error()
+                if err:
+                    self.Log("原因: " + err)
                 if p.Autorestart.eval() and self.restarts < 1 and not self._alive():
                     self.restarts += 1
                     self.Log("ワーカーを自動再起動します（1 回まで）")

@@ -39,7 +39,7 @@ DEFAULT_CONFIG = {
     "node_dir": "",                # empty = node on PATH, /opt/homebrew/bin, /usr/local/bin
     "ffmpeg": "ffmpeg",
     "python": "",
-    "audio_device": "BlackHole",
+    "audio_device": "",            # empty = BlackHole (macOS) / CABLE Output (Windows) / system default
     "osc_to_td": "127.0.0.1:9100",
     "osc_from_td": 9101,
     "recognizer": "shazamio",
@@ -187,31 +187,54 @@ class AudioRing:
         return y, t_end
 
 
+class AudioDeviceError(RuntimeError):
+    pass
+
+
+# Windows lists every device once per host API; lower latency first (WDM-KS is left out: flaky)
+HOSTAPI_ORDER = ["Windows WASAPI", "Windows DirectSound", "MME", "Core Audio", "ALSA", "JACK Audio Connection Kit"]
+
+
 class DeviceInput:
     def __init__(self, name, log):
         import sounddevice as sd
         self.sd = sd
         devs = sd.query_devices()
-        idx = None
-        for i, d in enumerate(devs):
-            if d["max_input_channels"] > 0 and name.lower() in d["name"].lower():
-                idx = i
-                break
-        if idx is None:
-            names = [d["name"] for d in devs if d["max_input_channels"] > 0]
-            raise RuntimeError(f"audio device '{name}' not found. inputs: {names}")
-        d = devs[idx]
-        self.sr = int(d["default_samplerate"])
-        self.ch = min(2, int(d["max_input_channels"]))
-        self.ring = AudioRing(self.sr)
-        self.name = d["name"]
+        apis = [a["name"] for a in sd.query_hostapis()]
+        name = (name or "").strip() or ("CABLE Output" if IS_WIN else "BlackHole" if sys.platform == "darwin" else "")
+        if name:
+            cands = [i for i, d in enumerate(devs) if d["max_input_channels"] > 0 and name.lower() in d["name"].lower()]
+        else:
+            cands = [sd.default.device[0]] if sd.default.device[0] is not None and sd.default.device[0] >= 0 else []
+
+        def rank(i):
+            api = apis[devs[i]["hostapi"]]
+            return HOSTAPI_ORDER.index(api) if api in HOSTAPI_ORDER else len(HOSTAPI_ORDER)
+        cands = [i for i in sorted(cands, key=rank) if apis[devs[i]["hostapi"]] != "Windows WDM-KS"] or cands
+        if not cands:
+            names = sorted({d["name"] for d in devs if d["max_input_channels"] > 0})
+            raise AudioDeviceError("音声入力デバイス「%s」が見つかりません。TD の Config ページの Audio device に、"
+                                   "次のどれかの名前の一部を入れてください: %s" % (name, " / ".join(names)))
 
         def cb(indata, frames, tinfo, status):
             self.ring.push(indata.mean(axis=1).astype(np.float32))
 
-        self.stream = sd.InputStream(device=idx, channels=self.ch, samplerate=self.sr,
-                                     blocksize=1024, dtype="float32", callback=cb)
-        log(f"audio: {self.name} @ {self.sr} Hz, {self.ch} ch")
+        errors = []
+        for idx in cands:
+            d = devs[idx]
+            sr = int(d["default_samplerate"])
+            ch = min(2, int(d["max_input_channels"]))
+            try:
+                self.ring = AudioRing(sr)
+                self.stream = sd.InputStream(device=idx, channels=ch, samplerate=sr,
+                                             blocksize=1024, dtype="float32", callback=cb)
+            except Exception as e:  # noqa
+                errors.append(f"{d['name']} [{apis[d['hostapi']]}]: {e}")
+                continue
+            self.sr, self.ch, self.name = sr, ch, d["name"]
+            log(f"audio: {self.name} [{apis[d['hostapi']]}] @ {self.sr} Hz, {self.ch} ch")
+            return
+        raise AudioDeviceError("音声入力デバイスを開けません: " + " | ".join(errors))
 
     def start(self):
         self.stream.start()
@@ -675,7 +698,12 @@ class Worker:
         if self.input_file:
             self.input = FileInput(self.input_file, self.ffmpeg, self.log)
         else:
-            self.input = DeviceInput(self.cfg["audio_device"], self.log)
+            try:
+                self.input = DeviceInput(self.cfg.get("audio_device", ""), self.log)
+            except Exception as e:  # noqa
+                self.log("ERROR " + str(e))      # also reaches TD (Last log) before the worker exits
+                time.sleep(0.5)
+                raise
         self.input.start()
         threading.Thread(target=self._estimate_loop, daemon=True).start()
         threading.Thread(target=self._heartbeat_loop, daemon=True).start()
